@@ -132,22 +132,15 @@ def generate_answer(query, tokenizer, llm_model):
     context = "\n\n".join([item["chunk"] for item in retrieved_data])
 
     prompt = f"""
-You are an HR policy assistant.
-
-Answer the question using ONLY the context below.
-
-If the answer is not clearly stated in the context, say:
-"I could not find a clear answer in the policy."
-
-Give a short, clear, professional answer.
+You are an HR assistant. Answer ONLY using the context below.
 
 Context:
 {context}
 
 Question: {query}
-
 Answer:
 """
+
     inputs = tokenizer(prompt, return_tensors="pt")
     inputs = {k: v.to(device) for k, v in inputs.items()}
 
@@ -161,17 +154,15 @@ Answer:
     response = tokenizer.decode(outputs[0], skip_special_tokens=True)
     response = response.split("Answer:")[-1].strip()
 
-# remove repeated sentences
-    response = " ".join(dict.fromkeys(response.split()))
+    scores = [item["score"] for item in retrieved_data]
 
-scores = [item["score"] for item in retrieved_data]
+    # ✅ MUST BE INDENTED
+    if len(scores) == 0:
+        return [], "I could not find a relevant answer in the policy.", 0.0
 
-if len(scores) == 0:
-    return [], "I could not find a relevant answer in the policy.", 0.0
+    confidence = max(scores)
 
-confidence = max(scores)
-
-return retrieved_data, response, confidence
+    return retrieved_data, response, confidence
     
 # -----------------------------
 # CHAT UI
