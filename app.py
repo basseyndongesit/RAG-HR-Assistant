@@ -36,7 +36,14 @@ def clean_text(text):
 @st.cache_data
 def paragraph_chunking(text):
     paragraphs = text.split("\n")
-    return [p.strip() for p in paragraphs if len(p.strip()) > 50]
+    
+    cleaned = []
+    for p in paragraphs:
+        p = p.strip()
+        if len(p) > 100:  # increase threshold
+            cleaned.append(p)
+    
+    return cleaned
 
 # -----------------------------
 # LOAD & PREPROCESS
@@ -63,26 +70,27 @@ embeddings = compute_embeddings(chunks)
 # -----------------------------
 # RETRIEVAL
 # -----------------------------
-def cosine_similarity(a, b):
-    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
-
-def retrieve(query, k=3):
+def retrieve(query, k=3, threshold=0.5):
     query_embedding = embedding_model.encode([query])[0]
-
+    
     similarities = [
         cosine_similarity(query_embedding, emb)
         for emb in embeddings
     ]
-
-    top_k_idx = np.argsort(similarities)[-k:][::-1]
-
+    
+    # sort indices
+    sorted_idx = np.argsort(similarities)[::-1]
+    
     results = []
-    for idx in top_k_idx:
-        results.append({
-            "chunk": chunks[idx],
-            "score": similarities[idx]
-        })
-
+    for idx in sorted_idx:
+        if similarities[idx] >= threshold:
+            results.append({
+                "chunk": chunks[idx],
+                "score": similarities[idx]
+            })
+        if len(results) == k:
+            break
+    
     return results
 
 # -----------------------------
@@ -104,9 +112,9 @@ tokenizer, llm_model = load_llm()
 # CONFIDENCE INTERPRETATION
 # -----------------------------
 def interpret_confidence(score):
-    if score > 0.7:
+    if score > 0.6:
         return "🟢 High Confidence"
-    elif score > 0.5:
+    elif score > 0.4:
         return "🟡 Medium Confidence"
     else:
         return "🔴 Low Confidence"
@@ -120,15 +128,22 @@ def generate_answer(query, tokenizer, llm_model):
     context = "\n\n".join([item["chunk"] for item in retrieved_data])
 
     prompt = f"""
-You are an HR assistant. Answer ONLY using the context below.
+You are an HR policy assistant.
+
+Answer the question using ONLY the context below.
+
+If the answer is not clearly stated in the context, say:
+"I could not find a clear answer in the policy."
+
+Give a short, clear, professional answer.
 
 Context:
 {context}
 
 Question: {query}
+
 Answer:
 """
-
     inputs = tokenizer(prompt, return_tensors="pt")
     inputs = {k: v.to(device) for k, v in inputs.items()}
 
@@ -142,8 +157,11 @@ Answer:
     response = tokenizer.decode(outputs[0], skip_special_tokens=True)
     response = response.split("Answer:")[-1].strip()
 
+# remove repeated sentences
+    response = " ".join(dict.fromkeys(response.split()))
+
     scores = [item["score"] for item in retrieved_data]
-    avg_score = np.mean(scores)
+    confidence = max(scores)  # use best match instead
 
     return retrieved_data, response, avg_score
     
