@@ -5,6 +5,8 @@ import re
 import PyPDF2
 from sentence_transformers import SentenceTransformer
 from transformers import AutoTokenizer, AutoModelForCausalLM
+import torch
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
 # -----------------------------
 # PAGE CONFIG
@@ -88,10 +90,12 @@ def retrieve(query, k=3):
 # -----------------------------
 @st.cache_resource
 def load_llm():
-    model_name = "distilgpt2"  # 👈 lightweight model
+    model_name = "distilgpt2"
     
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = AutoModelForCausalLM.from_pretrained(model_name)
+    
+    model.to(device)  # 👈 IMPORTANT
     
     return tokenizer, model
 
@@ -124,16 +128,14 @@ Question: {query}
 Answer:
 """
 
-    device = "cpu"
-
     inputs = tokenizer(prompt, return_tensors="pt").to(device)
 
     outputs = llm_model.generate(
-    **inputs,
-    max_new_tokens=150,
-    temperature=0.7,
-    pad_token_id=tokenizer.eos_token_id  # 👈 critical fix
-)
+        **inputs,
+        max_new_tokens=150,
+        temperature=0.7,
+        pad_token_id=tokenizer.eos_token_id
+    )
 
     response = tokenizer.decode(outputs[0], skip_special_tokens=True)
     response = response.split("Answer:")[-1].strip()
