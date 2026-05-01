@@ -134,15 +134,10 @@ def generate_answer(query, tokenizer, llm_model):
 
     context = "\n\n".join([item["chunk"] for item in retrieved_data])
 
-prompt = f"""
+    prompt = f"""
 You are an HR policy assistant.
 
 Answer ONLY using the context.
-
-If the context does not clearly mention external employment or second jobs, say:
-"The policy does not clearly specify rules about working another job."
-
-Give a clear and professional answer.
 
 Context:
 {context}
@@ -167,7 +162,6 @@ Answer:
 
     scores = [item["score"] for item in retrieved_data]
 
-    # ✅ MUST BE INDENTED
     if len(scores) == 0:
         return [], "I could not find a relevant answer in the policy.", 0.0
 
