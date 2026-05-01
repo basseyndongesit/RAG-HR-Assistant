@@ -85,14 +85,15 @@ def retrieve(query, k=3, threshold=0.5):
     sorted_idx = np.argsort(similarities)[::-1]
     
     results = []
-    for idx in sorted_idx:
-        if similarities[idx] >= threshold:
+    if len(results) == 0:
+        # fallback: return top-k WITHOUT threshold
+        top_k_idx = np.argsort(similarities)[-k:][::-1]
+    
+        for idx in top_k_idx:
             results.append({
                 "chunk": chunks[idx],
                 "score": similarities[idx]
             })
-        if len(results) == k:
-            break
     
     return results
 
@@ -163,8 +164,13 @@ Answer:
 # remove repeated sentences
     response = " ".join(dict.fromkeys(response.split()))
 
-    scores = [item["score"] for item in retrieved_data]
-    confidence = max(scores)  # use best match instead
+scores = [item["score"] for item in retrieved_data]
+
+# ✅ Handle empty retrieval
+if len(scores) == 0:
+    return [], "I could not find a relevant answer in the policy.", 0.0
+
+confidence = max(scores)
 
     return retrieved_data, response, avg_score
     
