@@ -35,12 +35,12 @@ def clean_text(text):
 
 @st.cache_data
 def paragraph_chunking(text):
-    paragraphs = text.split("\n")
+    paragraphs = text.split("\n\n")  # double newline = better separation
     
     cleaned = []
     for p in paragraphs:
         p = p.strip()
-        if len(p) > 100:  # increase threshold
+        if len(p) > 150:
             cleaned.append(p)
     
     return cleaned
@@ -70,30 +70,33 @@ embeddings = compute_embeddings(chunks)
 # -----------------------------
 # RETRIEVAL
 # -----------------------------
-def cosine_similarity(a, b):
-    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
-
-def retrieve(query, k=3, threshold=0.5):
+def retrieve(query, k=3):
     query_embedding = embedding_model.encode([query])[0]
     
-    similarities = [
-        cosine_similarity(query_embedding, emb)
-        for emb in embeddings
-    ]
+    similarities = []
     
-    # sort indices
-    sorted_idx = np.argsort(similarities)[::-1]
+    for chunk, emb in zip(chunks, embeddings):
+        sim = cosine_similarity(query_embedding, emb)
+        
+        # ✅ keyword boost
+        keyword_bonus = 0
+        keywords = ["external employment", "second job", "other job", "conflict of interest"]
+        
+        for kw in keywords:
+            if kw.lower() in chunk.lower():
+                keyword_bonus += 0.2
+        
+        total_score = sim + keyword_bonus
+        similarities.append(total_score)
+    
+    top_k_idx = np.argsort(similarities)[-k:][::-1]
     
     results = []
-    if len(results) == 0:
-        # fallback: return top-k WITHOUT threshold
-        top_k_idx = np.argsort(similarities)[-k:][::-1]
-    
-        for idx in top_k_idx:
-            results.append({
-                "chunk": chunks[idx],
-                "score": similarities[idx]
-            })
+    for idx in top_k_idx:
+        results.append({
+            "chunk": chunks[idx],
+            "score": similarities[idx]
+        })
     
     return results
 
@@ -131,13 +134,21 @@ def generate_answer(query, tokenizer, llm_model):
 
     context = "\n\n".join([item["chunk"] for item in retrieved_data])
 
-    prompt = f"""
-You are an HR assistant. Answer ONLY using the context below.
+prompt = f"""
+You are an HR policy assistant.
+
+Answer ONLY using the context.
+
+If the context does not clearly mention external employment or second jobs, say:
+"The policy does not clearly specify rules about working another job."
+
+Give a clear and professional answer.
 
 Context:
 {context}
 
 Question: {query}
+
 Answer:
 """
 
@@ -177,6 +188,8 @@ for msg in st.session_state.messages:
 
 # Input box
 query = st.chat_input("Ask an HR question...")
+if max(scores) < 0.4:
+    warning = "⚠️ Low relevance retrieved. Answer may be unreliable."
 
 if query:
     # User message
