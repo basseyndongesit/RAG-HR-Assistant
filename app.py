@@ -166,13 +166,12 @@ Answer:
 
 scores = [item["score"] for item in retrieved_data]
 
-# ✅ Handle empty retrieval
 if len(scores) == 0:
     return [], "I could not find a relevant answer in the policy.", 0.0
 
 confidence = max(scores)
 
-    return retrieved_data, response, avg_score
+return retrieved_data, response, confidence
     
 # -----------------------------
 # CHAT UI
