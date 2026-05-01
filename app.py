@@ -180,10 +180,13 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
+st.markdown(f"**Confidence:** {interpret_confidence(confidence_score)}")
+
+if confidence_score < 0.4:
+    st.warning("⚠️ Low relevance retrieved. Answer may be unreliable.")
+
 # Input box
 query = st.chat_input("Ask an HR question...")
-if max(scores) < 0.4:
-    warning = "⚠️ Low relevance retrieved. Answer may be unreliable."
 
 if query:
     # User message
