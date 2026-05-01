@@ -70,6 +70,9 @@ embeddings = compute_embeddings(chunks)
 # -----------------------------
 # RETRIEVAL
 # -----------------------------
+def cosine_similarity(a, b):
+    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
 def retrieve(query, k=3, threshold=0.5):
     query_embedding = embedding_model.encode([query])[0]
     
