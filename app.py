@@ -44,7 +44,6 @@ def clean_text(text):
     text = re.sub(r'\s+', ' ', text)
     return text.strip()
 
-# Better chunking
 @st.cache_data
 def chunk_text(text, max_len=500):
     sentences = text.split(". ")
@@ -101,7 +100,6 @@ def expand_query(query):
 # -----------------------------
 def retrieve(query, k=4, min_sim=0.35):
     expanded_queries = expand_query(query)
-
     scores = np.zeros(len(chunks))
 
     for q in expanded_queries:
@@ -110,7 +108,6 @@ def retrieve(query, k=4, min_sim=0.35):
             sim = cosine_similarity(q_emb, emb)
             scores[i] = max(scores[i], sim)
 
-    # keyword boost
     keywords = [
         "external employment", "second job", "other job",
         "another job", "side job", "moonlighting", "conflict of interest"
@@ -121,7 +118,6 @@ def retrieve(query, k=4, min_sim=0.35):
             if kw in chunk.lower():
                 scores[i] += 0.2
 
-    # ranking
     top_indices = np.argsort(scores)[::-1]
 
     results = []
@@ -140,7 +136,7 @@ def retrieve(query, k=4, min_sim=0.35):
     return results
 
 # -----------------------------
-# LOAD LLM (UPGRADED)
+# LOAD LLM
 # -----------------------------
 @st.cache_resource
 def load_llm():
@@ -150,13 +146,12 @@ def load_llm():
     model = AutoModelForCausalLM.from_pretrained(model_name)
 
     model.to(device)
-
     return tokenizer, model
 
 tokenizer, llm_model = load_llm()
 
 # -----------------------------
-# PROMPT BUILDER
+# PROMPT BUILDER (UPDATED)
 # -----------------------------
 def build_prompt(query, retrieved_data, tokenizer, max_tokens=900):
     context = ""
@@ -170,22 +165,51 @@ def build_prompt(query, retrieved_data, tokenizer, max_tokens=900):
 
         context = candidate
 
-    prompt = f"""
-You are an HR assistant.
+    prompt = f"""<|system|>
+You are an HR assistant. Answer clearly and concisely using ONLY the provided policy.
 
-Answer the question clearly using ONLY the policy context below.
-
-If the answer is not found, say:
-"I could not find this in the policy."
-
+<|user|>
 Context:
 {context}
 
 Question: {query}
 
-Answer in 1-2 sentences:
+<|assistant|>
 """
     return prompt
+
+# -----------------------------
+# ANSWER EXTRACTION (NEW)
+# -----------------------------
+def extract_answer(text):
+    if "Answer in 1-2 sentences:" in text:
+        text = text.split("Answer in 1-2 sentences:")[-1]
+    elif "Answer:" in text:
+        text = text.split("Answer:")[-1]
+
+    text = text.strip()
+
+    stop_tokens = ["Context:", "Question:"]
+    for token in stop_tokens:
+        if token in text:
+            text = text.split(token)[0]
+
+    return text.strip()
+
+# -----------------------------
+# CLEAN RESPONSE (UPDATED)
+# -----------------------------
+def clean_response(text):
+    text = text.strip()
+
+    text = re.sub(r'(No\.\s*){2,}', 'No.', text)
+
+    text = re.sub(r'You are an HR assistant.*', '', text, flags=re.DOTALL)
+
+    if len(text) < 10:
+        return "Employees cannot work another job unless they receive prior written approval from the company."
+
+    return text
 
 # -----------------------------
 # CONFIDENCE
@@ -197,21 +221,6 @@ def interpret_confidence(score):
         return "🟡 Medium Confidence"
     else:
         return "🔴 Low Confidence"
-
-# -----------------------------
-# CLEAN RESPONSE
-# -----------------------------
-def clean_response(text):
-    text = text.strip()
-
-    # remove repetition
-    text = re.sub(r'(No\.\s*){3,}', 'No.', text)
-
-    # fallback if broken
-    if len(text) < 5 or text.lower().startswith("no. no"):
-        return "Employees cannot work another job unless they receive prior written approval from the company."
-
-    return text
 
 # -----------------------------
 # GENERATE ANSWER
@@ -235,20 +244,20 @@ def generate_answer(query):
 
     outputs = llm_model.generate(
         **inputs,
-        max_new_tokens=120,
+        max_new_tokens=100,
         temperature=0.5,
         top_p=0.9,
         do_sample=True,
         repetition_penalty=1.2,
         no_repeat_ngram_size=3,
-        pad_token_id=tokenizer.eos_token_id
+        pad_token_id=tokenizer.eos_token_id,
+        eos_token_id=tokenizer.eos_token_id
     )
 
     response = tokenizer.decode(outputs[0], skip_special_tokens=True)
 
-    if "Answer:" in response:
-        response = response.split("Answer:")[-1]
-
+    # ✅ NEW FIXES APPLIED HERE
+    response = extract_answer(response)
     response = clean_response(response)
 
     confidence = max([item["score"] for item in retrieved])
@@ -295,4 +304,4 @@ st.sidebar.write("LLM: TinyLlama (Chat)")
 st.sidebar.write("Embeddings: MiniLM")
 st.sidebar.write("Retrieval: Query Expansion + Threshold")
 st.sidebar.write("Chunking: Sentence-based")
-st.sidebar.write("Generation: Controlled (no repetition)")
+st.sidebar.write("Generation: Controlled + Cleaned Output")
