@@ -128,7 +128,8 @@ Question: {query}
 Answer:
 """
 
-    inputs = tokenizer(prompt, return_tensors="pt").to(device)
+    inputs = tokenizer(prompt, return_tensors="pt")
+    inputs = {k: v.to(device) for k, v in inputs.items()}
 
     outputs = llm_model.generate(
         **inputs,
@@ -144,7 +145,7 @@ Answer:
     avg_score = np.mean(scores)
 
     return retrieved_data, response, avg_score
-
+    
 # -----------------------------
 # CHAT UI
 # -----------------------------
