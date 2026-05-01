@@ -88,16 +88,12 @@ def retrieve(query, k=3):
 # -----------------------------
 @st.cache_resource
 def load_llm():
-    model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+    model_name = "distilgpt2"  # 👈 lightweight model
+    
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        torch_dtype=torch.float32,
-        device_map="auto"
-    )
+    model = AutoModelForCausalLM.from_pretrained(model_name)
+    
     return tokenizer, model
-
-tokenizer, llm_model = load_llm()
 
 # -----------------------------
 # CONFIDENCE INTERPRETATION
@@ -133,10 +129,11 @@ Answer:
     inputs = tokenizer(prompt, return_tensors="pt").to(device)
 
     outputs = llm_model.generate(
-        **inputs,
-        max_new_tokens=200,
-        temperature=0.2
-    )
+    **inputs,
+    max_new_tokens=150,
+    temperature=0.7,
+    pad_token_id=tokenizer.eos_token_id  # 👈 critical fix
+)
 
     response = tokenizer.decode(outputs[0], skip_special_tokens=True)
     response = response.split("Answer:")[-1].strip()
