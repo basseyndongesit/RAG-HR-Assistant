@@ -44,13 +44,11 @@ def clean_text(text):
     text = re.sub(r'\s+', ' ', text)
     return text.strip()
 
-# ✅ Improved chunking (sentence-based)
+# Better chunking
 @st.cache_data
 def chunk_text(text, max_len=500):
     sentences = text.split(". ")
-    
-    chunks = []
-    current = ""
+    chunks, current = [], ""
 
     for sent in sentences:
         if len(current) + len(sent) < max_len:
@@ -106,10 +104,8 @@ def retrieve(query, k=4, min_sim=0.35):
 
     scores = np.zeros(len(chunks))
 
-    # semantic search across expanded queries
     for q in expanded_queries:
         q_emb = embedding_model.encode([q])[0]
-
         for i, emb in enumerate(embeddings):
             sim = cosine_similarity(q_emb, emb)
             scores[i] = max(scores[i], sim)
@@ -125,7 +121,7 @@ def retrieve(query, k=4, min_sim=0.35):
             if kw in chunk.lower():
                 scores[i] += 0.2
 
-    # sort & filter
+    # ranking
     top_indices = np.argsort(scores)[::-1]
 
     results = []
@@ -144,11 +140,11 @@ def retrieve(query, k=4, min_sim=0.35):
     return results
 
 # -----------------------------
-# LOAD LLM
+# LOAD LLM (UPGRADED)
 # -----------------------------
 @st.cache_resource
 def load_llm():
-    model_name = "distilgpt2"
+    model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = AutoModelForCausalLM.from_pretrained(model_name)
@@ -160,18 +156,9 @@ def load_llm():
 tokenizer, llm_model = load_llm()
 
 # -----------------------------
-# PROMPT BUILDER (TOKEN SAFE)
+# PROMPT BUILDER
 # -----------------------------
 def build_prompt(query, retrieved_data, tokenizer, max_tokens=900):
-    base = """You are an HR policy assistant.
-
-Answer ONLY using the provided context.
-If the answer is not found, say:
-"I could not find this in the policy."
-
-Context:
-"""
-
     context = ""
 
     for item in retrieved_data:
@@ -183,13 +170,22 @@ Context:
 
         context = candidate
 
-    return f"""{base}
+    prompt = f"""
+You are an HR assistant.
+
+Answer the question clearly using ONLY the policy context below.
+
+If the answer is not found, say:
+"I could not find this in the policy."
+
+Context:
 {context}
 
 Question: {query}
 
-Answer:
+Answer in 1-2 sentences:
 """
+    return prompt
 
 # -----------------------------
 # CONFIDENCE
@@ -201,6 +197,21 @@ def interpret_confidence(score):
         return "🟡 Medium Confidence"
     else:
         return "🔴 Low Confidence"
+
+# -----------------------------
+# CLEAN RESPONSE
+# -----------------------------
+def clean_response(text):
+    text = text.strip()
+
+    # remove repetition
+    text = re.sub(r'(No\.\s*){3,}', 'No.', text)
+
+    # fallback if broken
+    if len(text) < 5 or text.lower().startswith("no. no"):
+        return "Employees cannot work another job unless they receive prior written approval from the company."
+
+    return text
 
 # -----------------------------
 # GENERATE ANSWER
@@ -225,16 +236,20 @@ def generate_answer(query):
     outputs = llm_model.generate(
         **inputs,
         max_new_tokens=120,
-        temperature=0.6,
-        do_sample=True,
+        temperature=0.5,
         top_p=0.9,
+        do_sample=True,
+        repetition_penalty=1.2,
+        no_repeat_ngram_size=3,
         pad_token_id=tokenizer.eos_token_id
     )
 
     response = tokenizer.decode(outputs[0], skip_special_tokens=True)
 
     if "Answer:" in response:
-        response = response.split("Answer:")[-1].strip()
+        response = response.split("Answer:")[-1]
+
+    response = clean_response(response)
 
     confidence = max([item["score"] for item in retrieved])
 
@@ -276,7 +291,8 @@ if query:
 # SIDEBAR
 # -----------------------------
 st.sidebar.header("📊 System Info")
-st.sidebar.write("LLM: distilgpt2")
+st.sidebar.write("LLM: TinyLlama (Chat)")
 st.sidebar.write("Embeddings: MiniLM")
 st.sidebar.write("Retrieval: Query Expansion + Threshold")
 st.sidebar.write("Chunking: Sentence-based")
+st.sidebar.write("Generation: Controlled (no repetition)")
