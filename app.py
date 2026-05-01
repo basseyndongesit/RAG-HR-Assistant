@@ -98,6 +98,7 @@ def load_llm():
     model.to(device)  # 👈 IMPORTANT
     
     return tokenizer, model
+tokenizer, llm_model = load_llm()
 
 # -----------------------------
 # CONFIDENCE INTERPRETATION
