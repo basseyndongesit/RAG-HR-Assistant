@@ -113,7 +113,7 @@ def interpret_confidence(score):
 # -----------------------------
 # RAG GENERATION
 # -----------------------------
-def generate_answer(query):
+def generate_answer(query, tokenizer, llm_model):
     retrieved_data = retrieve(query)
 
     context = "\n\n".join([item["chunk"] for item in retrieved_data])
@@ -170,7 +170,7 @@ if query:
     # Assistant response
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
-            retrieved, answer, confidence_score = generate_answer(query)
+            retrieved, answer, confidence_score = generate_answer(query, tokenizer, llm_model)
 
             st.markdown(answer)
 
