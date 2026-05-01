@@ -7,6 +7,10 @@ from sentence_transformers import SentenceTransformer
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 device = "cuda" if torch.cuda.is_available() else "cpu"
+import numpy as np
+
+def cosine_similarity(a, b):
+    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
 # -----------------------------
 # PAGE CONFIG
