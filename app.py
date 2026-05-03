@@ -165,16 +165,17 @@ def build_prompt(query, retrieved_data, tokenizer, max_tokens=900):
 
         context = candidate
 
-    prompt = f"""<|system|>
-You are an HR assistant. Answer clearly and concisely using ONLY the provided policy.
+    prompt = f"""
+You are an HR assistant.
 
-<|user|>
+Answer the question clearly using ONLY the policy context below.
+
 Context:
 {context}
 
 Question: {query}
 
-<|assistant|>
+Answer:
 """
     return prompt
 
@@ -182,17 +183,13 @@ Question: {query}
 # ANSWER EXTRACTION (NEW)
 # -----------------------------
 def extract_answer(text):
-    if "Answer in 1-2 sentences:" in text:
-        text = text.split("Answer in 1-2 sentences:")[-1]
-    elif "Answer:" in text:
+    if "Answer:" in text:
         text = text.split("Answer:")[-1]
 
     text = text.strip()
 
-    stop_tokens = ["Context:", "Question:"]
-    for token in stop_tokens:
-        if token in text:
-            text = text.split(token)[0]
+    # remove any leftover tokens
+    text = re.sub(r'<\|.*?\|>', '', text)
 
     return text.strip()
 
@@ -202,10 +199,10 @@ def extract_answer(text):
 def clean_response(text):
     text = text.strip()
 
-    text = re.sub(r'(No\.\s*){2,}', 'No.', text)
+    # remove weird tokens
+    text = re.sub(r'<\|.*?\|>', '', text)
 
-    text = re.sub(r'You are an HR assistant.*', '', text, flags=re.DOTALL)
-
+    # fallback if broken output
     if len(text) < 10:
         return "Employees cannot work another job unless they receive prior written approval from the company."
 
